@@ -7,9 +7,9 @@
 		"dist/main.js",
 		"dist/colorMenu.js",
 		"dist/focus.js",
+		"dist/transformFile.ts",
 		"dist/folderAndFiles.js",
 		"dist/makeUserSheet.js",
-		"dist/transformFile.js",
 		"dist/sendToClassRoom.ts"
 	]
 }
