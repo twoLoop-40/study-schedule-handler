@@ -1,0 +1,564 @@
+<script>
+    /**************************
+   * 로딩 할 때 나오는 화면 조절
+   * ************************/
+  const showLoadingScreen = function () {
+    const $loading = document.querySelector('#loading')
+    return () => {
+      const classes = $loading.classList
+      classes.contains('invisible') 
+        ? classes.remove('invisible') 
+        : classes.add('invisible')
+    }
+  }
+  // google.script.run promisify
+  const asyncRun = function ({ serverFunction = '', args = [] } = {}) {
+    const changeLoadingView = showLoadingScreen()
+    changeLoadingView()
+    return new Promise((resolve, reject) => {
+      google.script.run
+        .withSuccessHandler(result => {
+          changeLoadingView()
+          resolve(result)
+        })
+        .withFailureHandler(err => {
+          changeLoadingView()
+          reject(err)})
+        [serverFunction](...args)      
+    })
+  }
+
+  // Utility function pipe
+  const pipe = (...fns) => x => fns.reduce((y, f) => f(y), x)
+
+  const getUserInfoFromCaption = function () { //caption 정보에서 userInfo 리턴하는 함수
+    const captionEl = document.getElementById('user-info')
+    const [userCode, userName] = captionEl.textContent.split(/\s+/)
+    return { userCode, userName }
+  }
+
+  // 전역변수들 학생들 기본 정보, 개인별 데이타
+  let studentBasicInfo,
+  scheduleData, // 업로드 된 학생의 스케줄을 저장하는 변수
+  classData, // 어떤 클래스가 있는지 저장하는 변수
+  classStudents, // 클래스 학생 전역변수에 저장
+  classScheduleData // 업로드 된 클래스의 스케줄을 저장하는 전역변수
+              
+  // 학생들의 기본정보를 모아두는 함수
+  const getStudentsBasicInfo = function () {
+    asyncRun({ serverFunction: 'getStudentBasicInfo' })
+      .then(basicInfo => {
+        //console.log(basicInfo)
+        studentBasicInfo = basicInfo
+      })
+      .catch(err => console.error(err))
+  } 
+  // 신규 사용자 등록하기
+  const initializeStudent = function () {
+    const userCodeEl = document.querySelector('#userCode')
+    const userNameEl = document.querySelector('#userName')
+    const alertWarning = makeAlert('warning')
+    Promise.resolve({ userCodeEl, userNameEl })
+      .then(elements => {
+        const { userCodeEl, userNameEl} = elements
+        const userCode = userCodeEl.value.trim()
+        const userName = userNameEl.value.trim()
+        return { userCode, userName }
+      })
+      .then(userInfo => {
+        const { userCode, userName } = userInfo
+        if(!userCode || !userName) throw Error('사용자 정보를 입력해주세요')
+        return userInfo
+      })
+      .then(userInfo => {
+        const { userCode, userName } = userInfo
+        asyncRun({ serverFunction: 'initializeStudent', 
+          args: [{ userName, userCode }] 
+        })
+        .then(msgs => {Object.values(msgs).forEach(msg => alertWarning(msg))})
+      })    
+      .then(() => {
+        userCodeEl.value = ''
+        userNameEl.value = ''
+      })
+      .then(() => getStudentsBasicInfo())
+      .catch(err => {
+        const alert = makeAlert('danger')
+        alert(err)
+      })
+  }
+  /**************************************
+  * 학생의 스케줄 정보불러 와서 화면에 표시하기
+  ***************************************/
+  // 템플릿 가져오기
+  const templateOn = function (templateId) {
+    const templateBox = document.querySelector(templateId)
+    return templateBox.content.cloneNode(true).children[0]
+  }
+
+  // 주어진 엘리먼트에 속하는 엘리먼트에 원하는 엘리먼트에 정보달아서 리턴
+  // 클래스 만들기
+  class EquipElement {
+    constructor (element) {
+      this.element = element
+    }
+    // tag에 따른 html-elements 뽑기
+    elementsByTag (tagName) {
+      return this.element.getElementsByTagName(tagName)
+    }
+
+    makeTextExtractor (elements) {
+      let result = []
+      for(let element of elements) {
+        result.push(schedule => element.textContent = schedule[element.className])
+      }
+      return result
+    }
+    
+    extractText (tagName) {
+      const textExtractors = pipe(
+        this.elementsByTag.bind(this),
+        this.makeTextExtractor
+      ) (tagName)
+      return (schedule) => {
+        //console.log(schedule)
+        textExtractors.forEach(extractor => extractor(schedule))
+      } 
+    }
+
+    // 갯수와 종류 입력해서 element 만들어서 붙이고 클래스 네임 달기
+    makeElements ({number = 0, nodeTag = '', className = ''} = {}) {
+      const elements = []
+      for (let i = 0; i < number; i++) {
+        let node = document.createElement(nodeTag)
+        if(className) {
+          className.split(' ').forEach(name => node.classList.add(name))
+        }
+        elements.push(node)
+      }
+      if(elements.length <= 1) return elements[0]
+      //console.log(elements)
+      return elements
+    }
+    // this element에 다른 엘리먼트 붙이기
+    attachNode (node) {
+      attachNodeOn(this.element)(node)
+      return this
+    }
+    // 동질적인 자료의 배열을 입력받아 element 원하는 방식으로 표시하기
+    setElementsFromArray ({ items = [], nodeTag = '', className } = {}) {
+      items = items.filter(([_, status]) => status)
+      //console.log(items)
+      const args = {
+        number: items.length,
+        nodeTag,
+        className
+      }
+      //console.log(args)
+      return (afterAction) => {
+        //console.log(args)
+        let elements = this.makeElements(args)
+        // 엘리먼트 타입 맞추기
+        if(!Array.isArray(elements)) { elements = [elements]}
+        elements.map((element, idx) => {
+          const inputNodes = this.makeElements(
+            { 
+              number: items[idx].length, 
+              nodeTag: 'input', 
+              className: 'form-inline form-control form-control-sm track-data'
+            }
+          )
+          items[idx].map((content, i) => {
+            const node = inputNodes[i]
+            node.setAttribute("readonly", true)
+            node.value = content
+            node.type = 'text'
+            if(i == 1) node.classList.add('track-status')
+            return node
+          })
+          .forEach(node => element.appendChild(node))
+          //console.log(element)
+          return element
+        })
+        .forEach(element => this.element.appendChild(element))
+        if(afterAction) afterAction(this.element)
+      }
+    }
+    // 체크 박스 만들기
+    makeCheckBox() {
+      const checkHolder = this.makeElements(
+        { number: 1, nodeTag:'td', className: 'check-holder' }
+      )
+      const checkBox = this.makeElements(
+        { number: 1,  nodeTag: 'input', className: 'form-check-input edit-schedule' }
+      )
+      checkBox.type = "checkbox"
+      checkBox.value = ""
+      checkHolder.append(checkBox)
+      return checkHolder
+    }        
+  }
+  // 객체를 이용해서 td element에 텍스트 다는 함수 만들기
+  const modifyElement = function (element) {
+    const elementSetter = new EquipElement(element)
+    
+    return scheduleInfo => {
+      elementSetter.extractText('td')(scheduleInfo)
+      const { schedule } = scheduleInfo
+      //console.log(schedule)
+      const setTracks = elementSetter.setElementsFromArray(
+        { items: schedule, nodeTag: 'td', className: 'track' }
+      )
+      const checkHolder = elementSetter.makeCheckBox()
+      setTracks(element => element.prepend(checkHolder))
+      //console.log(elementSetter.element)
+      return element
+    }    
+  }
+
+  // 원하는 곳에 append하기
+  const attachNodeOn = function (node) {
+    return element => {
+      if(node) {
+         node.appendChild(element)
+      }
+    }   
+  } 
+  // scheduleInfo 에 있는 데이타를 tr에 반영해서 보여줌
+  const displaySchedule = function (scheduleInfo = {}) {
+    const extractor = pipe(
+      templateOn,
+      modifyElement
+    )("#schedule-template")
+    return extractor(scheduleInfo)
+  }
+
+  /*************************************************
+   * checkbox check 되어 있을 때 readonly -> false로
+   * ***********************************************/ 
+  const changeScheduleReadOnly = function (e) {
+    let parentRow = e.target.closest(".schedule-row")
+    const trackElements = parentRow.getElementsByClassName('track-data')
+    const statusElements = parentRow.getElementsByClassName('track-status')
+    const leftNumberForNewNode = 10 - statusElements.length
+    //console.log(leftNumberForNewNode)
+    
+    const checkBox = parentRow.querySelector(".edit-schedule")
+    if (checkBox.checked) {
+      if(leftNumberForNewNode) { // 빈 인풋 박스 달기
+        const parentElementSetter = new EquipElement(parentRow)
+      let blankElements = parentElementSetter.makeElements(
+        { 
+          number: leftNumberForNewNode,  
+          nodeTag: 'td', 
+          className: 'track'
+        }
+      )
+      if(!Array.isArray(blankElements)) {blankElements = [blankElements]}
+      blankElements.map($track => {
+        const trackElementSetter = new EquipElement($track)
+        const $examCode = trackElementSetter.makeElements(
+          { 
+            number: 1, 
+            nodeTag: 'input', 
+            className: 'form-inline form-control form-control-sm track-data' 
+          }
+        )
+        const $status = trackElementSetter.makeElements(
+          {
+            number: 1, 
+            nodeTag: 'input', 
+            className: 'form-inline form-control form-control-sm track-data track-status'
+          }
+        )
+        trackElementSetter
+          .attachNode($examCode)
+          .attachNode($status)
+        return trackElementSetter.element 
+      })
+      .forEach($track => parentElementSetter.attachNode($track))
+      //console.log(parentRow)
+      }
+      
+    
+      for (let box of statusElements) {
+        box.setAttribute('list', 'status-list')
+      }
+      for (let box of trackElements) {
+        box.readOnly = false
+      }
+
+    } else {
+      // 이전 데이타 복원 작업, schedule.round는 숫자인거 조심할 것
+      const round = parentRow.querySelector('.round').textContent
+      const schedule = scheduleData
+        .filter(schedule => 
+          schedule.round.toString() === round)
+        [0] // 필터의 결과는 array
+      const $previousTracks = displaySchedule(schedule).querySelectorAll('.track')
+      const $currentTracks = parentRow.querySelectorAll('.track')
+      for (let $track of $currentTracks) {
+        $track.remove()
+      }
+      for (let $track of $previousTracks) {
+        parentRow.append($track)
+      }    
+    }
+  }
+  // 전역의 스케줄 데이터의 스케줄 일부를 다른 스케줄로 바꾸는 함수
+  changeScheduleElement = function (scheduleElement) {
+    const $checkBox = scheduleElement.querySelector('.edit-schedule')
+    $checkBox.checked = false
+  }
+  
+  /*****************************
+   * 스케줄 매니저를 이용하는 함수들
+   * ***************************/
+  // 활성화 시키는 함수
+  const activate = async function () {
+    // user-info
+    const scheduleManager = pipe(
+      getUserInfoFromCaption,
+      userInfo => new ScheduleManager(userInfo)          
+    ) ()
+    const checked = scheduleManager.getCheckedBoxes()        
+    if(checked.length > 1 || checked.length == 0) {
+      const alert = makeAlert('danger')
+      alert('하나의 체크 박스만 체크해 주세요')
+    } else {
+    const round = scheduleManager.getRoundsOfChecked()[0]
+    await scheduleManager.activate(round)
+    }  
+  }
+  // 신규 스케줄 업데이트 하는 함수
+  const addNewSchedule = async function () {
+    const userInfo = getUserInfoFromCaption()
+    const sm = new ScheduleManager(userInfo)
+    const generatedSchedule = await sm.makeBasicSchedule()
+    if(!generatedSchedule || generatedSchedule.length == 0) {
+      clearAddSchedule()
+      return 
+    }
+    sm.scheduleToNode(generatedSchedule)
+    await sm.loadSchedules()
+    sm.syncSchedules()
+    clearAddSchedule()        
+  }
+  // 스케줄 변경을 저장하는 함수
+  const modifySchedules = function () {
+    const userInfo = getUserInfoFromCaption()
+    const sm = new ScheduleManager(userInfo)
+    $filteredSchedules = sm.filterProcessedSchedule()
+    if($filteredSchedules.length == 0) {
+      const alert = makeAlert("warning")
+      alert('이미 학생들에게 나누어진 스케줄은 수정할 수 없습니다.')
+      return 
+    }
+    const modifiedSchedules = $filteredSchedules.map(scheduleRow => getDataFromScheduleRow(scheduleRow))
+    // 변경된 스케줄을 정식 스케줄 폼으로 바꾸기
+    const modifiedScheduleForms = modifiedSchedules.map(schedule => {
+      const round = schedule.round
+      return scheduleData
+        .filter(src => src.round.toString() === round.toString())
+        .map(filteredSrc => Object.assign(filteredSrc, schedule))
+        [0]    
+    })
+    asyncRun(
+      { 
+        serverFunction: 'modifySchedules', 
+        args: [userInfo, modifiedScheduleForms]
+      }
+    )
+    .then(msg => {
+      const alert = makeAlert('success')
+      alert(msg)
+    })
+    .then(() => {
+      const elCheckBoxes = document.querySelectorAll('.edit-schedule')
+      //console.log('모든 체크박스', elCheckBoxes)
+      const checkedBoxes = [...elCheckBoxes].filter(box => box.checked == true) // []
+      //console.log('체크된 체크박스', checkedBoxes)
+      return { checkedBoxes } 
+    })
+    .then(data => {
+      const inputEvent = new InputEvent(
+        'input', 
+        {
+          bubbles: true,
+          cancelable: true
+        }
+      )
+      return { ...data, inputEvent}
+    })
+    .then(data => {
+      const { checkedBoxes, inputEvent } = data
+      checkedBoxes
+        .map(box => {
+          box.checked = false
+          return box })
+        .forEach(box => box.dispatchEvent(inputEvent))
+    })
+    .catch(err => {
+      const alert = makeAlert('warning')
+      alert(err)
+    }) 
+    
+  }
+
+  // 성적 매니저
+  class ScoreManager {
+    constructor(userInfo = {}) {
+      this.scores = []
+      this.userInfo = userInfo
+    }
+    // 학생 성적 데이타 받는 함수
+    // async loadScores () {}
+  }
+  
+  
+  
+  /****************************
+   * 신규 스케줄 등록하기
+   * **************************/
+  // 신규 스케줄 박스 보이게 하거나 닫기
+  const addScheduleBox = function () {
+    const $addSchedule = document.querySelector('#add-schedule')
+    const classes = $addSchedule.classList
+    //console.log(classList)
+    if (classes.contains('d-none')) {
+      classes.remove('d-none')
+    } else {
+      classes.add('d-none')
+    }
+  }
+  // 
+  const clearAddSchedule = function () {
+    document.querySelector('#lecture-date-input').value = ''
+    document.querySelectorAll('.exam-code').forEach($code => $code.value = '')      
+  }
+  /********************
+   * alert object 만들기
+   * 함수 객체 형태로 만듦
+   ********************/
+  const makeAlert = function (type = '') { // type 은 danger, warning, success 
+    const $alert = document.querySelector(`.alert-${type}`)
+    return (message = '') => {
+      const $textNode = document.createTextNode(message)
+      $alert.append($textNode) 
+      $alert.classList.remove('d-none')
+      $alert.focus()
+      setTimeout(() => { 
+        $alert.classList.add('d-none')
+        $textNode.parentNode.removeChild($textNode)
+        }, 4000)   
+    }
+  }
+  /**
+   * 스케줄 작성할 때, 중복을 확인해주는 함수
+   * */
+  function duplicateExams (target) {
+    class ExamEl { // 입력하는 element 수정이나 새로운 스케줄
+      static create (el) {
+        return new ExamEl(el)
+      }
+      duplicateMemo (status) { // 중복 체크, 한번 중복이면 변경 불가
+        if (this.duplicate) return this
+        if (status) {
+          this.duplicate = status
+          return this
+        } else {return this}
+      }
+      changeColor(color) {
+        const colors = {
+          'red': '#FF4500',
+          'blue': '#1E90FF',
+          'lightgrey': '#adad85'
+        }
+        if (color) {
+          this.el.style.backgroundColor = colors[color]
+        } else {
+          this.el.style.backgroundColor = ''
+        }
+        return this
+      }
+      onWork () {
+        return !this.readOnly ? true : false 
+      }
+      blurAction () { // 탭해서 옮기면 여태 있던 색깔들 다 제거하는 이벤트
+        const action = () => {
+          this.changeColor()
+          const board = Array
+            .from(document.querySelectorAll('.track-data:not(.track-status)'))
+            .map(examTrack => ExamEl.create(examTrack))
+          board.forEach(examEl => examEl.changeColor())
+          this.el.removeEventListener('blur', action)
+        }
+        return this.el.addEventListener('blur', action)
+      }
+      constructor (el) {
+        this.readOnly = el.readOnly // bool
+        this.examCode = el.value
+        this.el = el
+        this.duplicate = false
+      }
+    }
+    const duplicateCheckOnTarget = (targetEl = new ExamEl()) => {
+      const check = (exams) => {
+        if (typeof exams === 'string') {
+          targetEl.duplicateMemo(exams.startsWith(targetEl.examCode))                         
+        } else if (Array.isArray(exams)) {
+          exams.forEach(exam => check(exam))
+          if (!targetEl.examCode) {
+            targetEl.changeColor()
+            return
+          } else {
+            targetEl.duplicate 
+              ? targetEl.changeColor('red') 
+              : targetEl.changeColor('blue')
+            return 
+          }
+        }
+      }
+      return check
+    }
+    const duplicateCheckOnBoard = (targetEl = new ExamEl()) => {
+      const checkBoard = (examEl) => {
+        if (!Array.isArray(examEl)) {
+          targetEl.examCode && !examEl.onWork() 
+          &&(examEl.examCode.startsWith(targetEl.examCode)) 
+            ? examEl.changeColor('lightgrey')
+            : examEl.changeColor()
+          return
+        } else {
+          examEl.forEach(el => checkBoard(el))
+          return
+        }
+      }
+      return checkBoard
+    }
+    const getPreviousExamCodes = () =>
+      scheduleData
+        .map(data => data.schedule)
+        .map(tracks => tracks
+          .filter(track => {
+            const status = track[1]
+            return (status === '제출' || status === '배부' || status === '발송')
+          })
+          .map(filtered => {
+            let examCode = filtered[0]
+            return typeof examCode === 'string' ? examCode : examCode.toString()
+          })
+        )
+        .flat()
+    
+    // 입력하는 element의 색깔을 조정
+    const targetEl = ExamEl.create(target)
+    targetEl.blurAction()
+    const examEls = Array
+      .from(document.querySelectorAll('.track-data:not(.track-status)'))
+      .map(examTrack => ExamEl.create(examTrack))
+    duplicateCheckOnBoard(targetEl)(examEls)
+    duplicateCheckOnTarget(targetEl)(getPreviousExamCodes())
+  }
+  console.log('line563')
+</script>

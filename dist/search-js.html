@@ -1,0 +1,56 @@
+  <script>
+  // search 기능
+  // 입력정보 받아와서 빈칸 기준으로 분리해서 리턴
+  const studentInput = function (event) {
+    const inputValue = event.target.value
+    return inputValue.split(/\s+/)        
+  }
+  // inputValues를 basicInfo가 가지고 있는지 조사
+  const findValueFrom = function (inputValues = []) {
+    //console.log(studentBasicInfo)
+    const filtered = studentBasicInfo.filter(info => 
+        inputValues.every(
+          value => {
+            if (value) 
+            return Object.values(info).some(
+              userInfo => userInfo.match(value)
+              )
+          }
+        )
+    )
+    //console.log(filtered)
+    return filtered
+  }
+  // filtered 된 항목을 화면에 표시
+  const display = function (studentInfos) {
+    // row를 만들어서 리턴
+    const makeRow = function ({ userName, userCode } = {}) {
+      const templateBox = document.querySelector("#searchTemplate")
+      const tr = templateBox.cloneNode(true).content
+      //console.log(tr)  
+      tr.querySelector('.userName').textContent = userName
+      tr.querySelector('.userCode').textContent = userCode
+      // write-schedule버튼에 user-code, user-name attr 달기
+      tr.querySelector('.write-schedule').dataset.userCode = userCode
+      tr.querySelector('.write-schedule').dataset.userName = userName
+      //console.log(tr)
+      return tr
+    }
+    const searchResults = document.querySelector("#search-results")
+    searchResults.innerHTML = ''
+    if(studentInfos) {
+      studentInfos.map(info => makeRow(info))
+      .forEach(tr => {
+      //console.log(tr)
+      searchResults.appendChild(tr)
+    })
+    }         
+  }
+  // 함수를 합쳐서 입력 결과에 맞는 학생 찾기
+  const searchStudent = pipe(
+    studentInput,
+    findValueFrom,
+    display
+  )
+  console.log('line55')
+</script>

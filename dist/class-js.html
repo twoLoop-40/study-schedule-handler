@@ -1,0 +1,397 @@
+<script>
+  
+  const updateClassStudentsNumber = function () {
+    const studentsNumber = classStudents.length
+    const elTotalNumber = document.querySelector('#class-students-number')
+    elTotalNumber.textContent = `현재 인원: ${studentsNumber}`
+  }
+  const classListUp = async function () {
+    await asyncRun({
+      serverFunction: 'getListOfClass',
+      args: []
+    })
+    .then(classInfoArray => {
+      classData = classInfoArray
+    })
+  }
+  const classMaxId = function () {
+    if(classData.length == 0) return 0
+    else {
+      const classIds = classData
+        .map(classInfo => classInfo.classId)
+        .map(id => parseInt(id))
+      console.log(classData)
+      
+      return Math.max(...classIds)
+    }    
+  }
+  const matchFromData = function ({ checkList, inputValues }) {
+    let filteredData = []
+    if(!inputValues[0]) return filteredData
+    filteredData = checkList.filter(info => {
+      const keys = Object.keys(info)
+      return inputValues.every(value => {
+        return keys.some(key => info[key].indexOf(value) > -1)
+      })
+    })
+    if(filteredData.length == 0) throw Error
+    return filteredData
+  }
+  const matchInput = function ({ event, data }) {
+    // const alertSuccess = makeAlert('success')
+    const alertWarning = makeAlert('warning')
+    return Promise.resolve(event)
+      .then(event => {
+        const eventValue = event.target.value
+        const inputValues = eventValue.split(/\s+/)
+        return { inputValues }
+      })
+      .then(inputData => {
+        const { inputValues } = inputData
+        return matchFromData({ inputValues, checkList: data })
+      })
+      .catch(err => {
+        return []
+      })
+  }
+  const makeClassTableElement = function (classInfo) {
+    Promise.resolve(classInfo)
+      .then(classInfo => {
+        const { classId } = classInfo
+        const classIdJson = createJsonFormat()
+        classIdJson
+          .tagOn('td')
+          .classListOn('.classId')
+          .textOn(classId)
+        const children = [classIdJson]
+        return { classInfo, children }
+      })
+      .then(data => {
+        const { classInfo, children } = data
+        const { className } = classInfo
+        const classNameJson = createJsonFormat()
+        classNameJson
+          .tagOn('td')
+          .classListOn('.className')
+          .textOn(className)
+        children.push(classNameJson)
+        return data
+      })
+      .then(data => {
+        const { classInfo, children } = data
+        const { lecturer } = classInfo
+        const lecturerJson = createJsonFormat()
+        lecturerJson
+          .tagOn('td')
+          .classListOn('.classLecturer')
+          .textOn(lecturer)
+        children.push(lecturerJson)
+        return data
+      })
+      .then(data => { 
+        const scheduleBtnBoxJson = createJsonFormat()
+        const manageBtnBoxJson = createJsonFormat()
+        scheduleBtnBoxJson
+          .tagOn('td')
+          .classListOn('.class-schedule-btn-box')
+        manageBtnBoxJson
+          .tagOn('td')
+          .classListOn('.class-manage-btn-box')
+        return { ...data, scheduleBtnBoxJson, manageBtnBoxJson }
+      })
+      .then(data => {
+        const { scheduleBtnBoxJson, manageBtnBoxJson, children } = data
+        const classScheduleBtnJson = createJsonFormat()
+        const classManageBtnJson = createJsonFormat()
+        classScheduleBtnJson
+          .tagOn('button')
+          .typeOn('button')
+          .classListOn('.btn.btn-outline-dark.class-schedule')
+          .textOn('클래스 스케줄')
+        classManageBtnJson
+          .tagOn('button')
+          .typeOn('button')
+          .classListOn('.btn.btn-outline-dark.class-edit')
+          .textOn('클래스 정보')
+        scheduleBtnBoxJson.children.push(classScheduleBtnJson)
+        manageBtnBoxJson.children.push(classManageBtnJson)
+        children.push(scheduleBtnBoxJson)
+        children.push(manageBtnBoxJson)
+        return children
+      })
+      .then(children => {
+        const tableRowJson = createJsonFormat()
+        tableRowJson
+          .tagOn('tr')
+          .classListOn('.classRow')
+        
+        tableRowJson.children = tableRowJson.children.concat(children)
+        //console.log(tableRowJson)
+        return tableRowJson
+      })
+      .then(trJson => {
+        const tableResultNode = document.querySelector('#class-search-results')
+        const trNodeOn = attachNodeOn(tableResultNode)
+        trNodeOn(createElementFromJson(trJson)) 
+      })
+      .catch(err => console.error(`class-js Error: ${err}`))
+  }
+// 새로운 클래스를 시트에 업데이트 하는 함수
+const addNewClass = function () {
+  const elClassName = document.querySelector('#class-name')
+  const elTeacherName = document.querySelector('#teacherName')
+  Promise.resolve({ elClassName, elTeacherName })
+    .then(elements => {
+      const { elClassName, elTeacherName } = elements
+      const className = elClassName.value
+      if(className.indexOf('-') > -1) throw Error('클래스 이름에 -를 넣지 마세요.')
+      if(!className) throw Error('클래스 이름을 입력하세요.')
+      const lecturer = elTeacherName.value
+      if(!lecturer) throw Error('담당 강사 이름을 입력하세요.')
+      return { className, lecturer }
+    })
+    .then(data => {
+      const classId = (classMaxId() + 1).toString()
+      return { ...data, classId}
+    })
+    .then(classInfo => {
+      if(classInfo) { 
+        classData.push(classInfo)
+      }
+      //console.log(classData)
+      return asyncRun({
+        serverFunction: 'addNewClassOnSheets',
+        args: [classInfo]
+      })
+    })
+    .then(msg => {
+      const alertSuccess = makeAlert('success')
+      alertSuccess(msg)
+    })
+    .then(() => {
+      elClassName.value = ''
+      elTeacherName.value = ''
+    })
+    .catch(err => {
+      const alertWarning = makeAlert('warning')
+      alertWarning(err)
+    })
+}
+/**********************
+ *  클래스 학생들 저장하기
+ * ********************/
+// 취소 버튼을 눌렀을 때 글자 없애기
+const emptyForCancel = function (element) {
+  element.value = ''  
+}
+const classInfoById = function (classId) {
+  //console.log(classId)
+  return classData.filter(classInfo => classInfo.classId == classId.toString())[0]
+}
+// label에서 클래스 시트 이륾 받아오기
+const getClassInfoFromLabel = function () {
+  const elClassLabel = document.querySelector('#class-student-label')
+  const classString = elClassLabel.textContent
+  return Promise.resolve(classString)
+    .then(classString => {
+      const regForId = /아이디:\s(\d+)/
+      return regForId.exec(classString)[1]
+    })
+    .then(id  => classData
+      .filter(classInfo => classInfo.classId == id.toString())
+      [0]
+    )
+}
+// 저장하기
+const saveClassStudent = function (userInfo) {
+  return Promise.resolve(userInfo)
+    .then(async userInfo => {
+      const classInfo = await getClassInfoFromLabel()
+      const { userCode, userName } = userInfo
+      return { userInfo, classInfo }
+    })
+    .then(data => {
+      return asyncRun(
+        {
+          serverFunction: 'addStudentNameOnSheet',
+          args: [data]
+        }
+      )
+      .then(msg => {
+        const { userInfo } = data
+        return { msg, userInfo }
+      })
+    })
+    .then(data => {
+      const { msg, userInfo } = data
+      console.log(msg)
+      if(msg.indexOf('Error') > -1) throw new Error(msg)
+      const alertSuccess = makeAlert('success')
+      alertSuccess(msg)
+      return userInfo
+    })
+    .then(userInfo => {
+      classStudents.push(userInfo)
+      updateClassStudentsNumber()
+    })
+    .catch(msg => {
+      const alertDanger = makeAlert('danger')
+      console.error(msg)
+      alertDanger(msg)
+    })
+    
+}
+// 클래스 스케줄을 업로드 하는 함수들
+const makeTagWighClass = function (tag, text, className) {
+  return Promise.resolve(text).then(text => { 
+    const jsonFormat = createJsonFormat()
+    return jsonFormat
+      .tagOn(tag)
+      .textOn(text)
+      .classListOn(className)  
+  })
+}
+/**
+ * @param {object} classSchedule
+ */
+const makeClassScheduleElements = function (classSchedule) {
+  return Promise.resolve(classSchedule)
+    .then(classSchedule => {
+      const { classRound, generatingDate, lectureDate } = classSchedule
+      return Promise.all(
+        [
+          makeTagWighClass('td', classRound, '.classRound'),
+          makeTagWighClass('td', generatingDate, '.generatingDate'),
+          makeTagWighClass('td', lectureDate, '.lectureDate')          
+        ]
+      )
+      .then(children => {
+        const { examCodes } = classSchedule
+        return { examCodes, children }        
+      })
+      
+    })
+    .then(data => {
+      const { children } = data
+      const jsonFormatCheckBox = createJsonFormat()
+      jsonFormatCheckBox
+        .tagOn('input')
+        .typeOn('checkbox')
+        .classListOn('.form-check-input.edit-schedule')
+      const jsonFormatCheckHolder = createJsonFormat()
+      jsonFormatCheckHolder
+        .tagOn('td')
+        .classListOn('.check-holder')
+      jsonFormatCheckHolder.children.push(jsonFormatCheckBox)
+      children.unshift(jsonFormatCheckHolder)
+      return { ...data, children }
+
+    })
+    .then(data => {
+      const { examCodes, children } = data
+      const makeExamData = function (examCodes, children) {
+        if(examCodes.length == 0) return Promise.resolve(children)
+        const examData = examCodes[0]
+        return Promise.resolve(examData)
+          .then(examData => {
+            const { examCode, studentNumber } = examData
+            const jsonFormatCode = createJsonFormat()
+            const jsonFormatNumber = createJsonFormat()
+            jsonFormatCode
+              .tagOn('input')
+              .classListOn('.form-inline.form-control.form-control-sm.track-data')
+              .valueOn(examCode.toString())
+              .readOnlyOn(true)
+            jsonFormatNumber
+              .tagOn('button')
+              .classListOn('.btn.btn-outline-secondary.btn-sm')
+              .textOn(studentNumber)
+            return { jsonFormatCode, jsonFormatNumber }
+          })
+          .then(async jsonData => {
+            const { jsonFormatCode, jsonFormatNumber } = jsonData
+            const td = await makeTagWighClass('td','','.track')
+            if(jsonFormatCode) {
+              [jsonFormatCode, jsonFormatNumber].forEach(jsonFormat => 
+                td.children.push(jsonFormat))
+            }
+            children.push(td)
+            return makeExamData(examCodes.slice(1), children)
+          })
+          .catch(err => {
+            console.error(err)
+            return makeExamData(examCodes.slice(1), children)
+          })
+      }
+      return makeExamData(examCodes, children)
+      
+    })
+    .then(classSchedulesJson => {
+      //console.log(classSchedulesJson)
+      const scheduleRowJson = createJsonFormat()
+      scheduleRowJson
+        .tagOn('tr')
+        .classListOn('class-schedule-row')
+      classSchedulesJson.forEach(scheduleJson => scheduleRowJson.children.push(scheduleJson))
+      return scheduleRowJson
+    })  
+}
+
+const makeCaptionText = function (captionText = '', classInfo) { 
+  // classInfo = { classId: string; className: string; lecturer: string }
+  if(!classInfo) return captionText 
+  if (classInfo.classId) {
+    captionText = captionText + `ID:${classInfo.classId}`
+    const { className } = classInfo
+    return makeCaptionText(captionText, { className })
+  }
+  if (classInfo.className) {
+    captionText = captionText + ` 클래스:${classInfo.className}`
+    return makeCaptionText(captionText)
+  }  
+}
+const loadClassScheduleView = async function (classId) {
+  // 뼈대 html을 업로드 하는 부분
+  const firstWork = asyncRun(
+    {
+      serverFunction: 'loadView',
+      args: [{fileName: 'class-schedule'}]
+    }
+  )
+  .then(html => app.innerHTML = html)
+
+  Promise.resolve(classInfoById(classId))
+    .then(async classInfo => {
+      await firstWork
+      const elCaption = document.querySelector('#class-schedule-info')
+      elCaption.textContent = makeCaptionText('', classInfo)
+      return classInfo
+    })
+    .then(classInfo => asyncRun({
+        serverFunction: 'makeClassScheduleJson',
+        args: [classInfo]
+      })
+    )
+    .then(classSchedulesJson => {
+      classScheduleData = classSchedulesJson
+    })
+    .then(() => {
+      return Promise.all(classScheduleData.map(classSchedule => 
+        makeClassScheduleElements(classSchedule))) 
+    })
+    .then(scheduleRowsJson => 
+      scheduleRowsJson.map(schedulRow => {
+        //console.log(schedulRow)
+        return createElementFromJson(schedulRow)
+      })       
+    ).then(classScheduleRows => {
+      //console.log(classScheduleRows)
+      const attach = attachNodeOn(document.querySelector('#class-schedule-results'))
+      classScheduleRows.forEach(tr => attach(tr))
+    })
+    .catch(err => console.error(err))
+
+  // class schedule을 업로드 하는 부분
+}
+
+</script>

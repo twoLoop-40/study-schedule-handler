@@ -1,0 +1,105 @@
+<div class="table-responsive">
+  <table class="table table-hover caption-top table-bordered">
+    <caption id="user-info"></caption>
+    <thead class="schdule-head">
+      <tr>
+        <th scope="col">@</th>
+        <th scope="col">회차</th>
+        <th scope="col">생성 날짜</th>
+        <th scope="col">강의 날짜</th>
+        <th scope="col">담당 강사</th>
+        <th scope="col">A</th>
+        <th scope="col" >H1</th>
+        <th scope="col" >H2</th>
+        <th scope="col" >H3</th>
+        <th scope="col" >H4</th>
+        <th scope="col" >H5</th>
+        <th scope="col" >H6</th>
+        <th scope="col" >H7</th>
+        <th scope="col" >H8</th>
+        <th scope="col" >H9</th>
+        <th scope="col" >H10</th>
+      </tr>
+    </thead>
+    <tbody id="schedule-results"></tbody>
+  </table>
+    <div class="alert-gruop container">
+      <div class="alert alert-warning fade show d-none" role="alert"></div>
+      <div class="alert alert-danger fade show d-none" role="alert"></div>
+      <div class="alert alert-success fade show d-none" role="alert"></div>
+    </div>  
+</div>
+<!-- 신규 스케줄 놓는 곳 -->
+<div id="add-schedule" class="mb-3 d-none">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover">
+      <label for="new-schedule">강의 날짜, 담당강사, 시험 코드를 입력하세요</label>
+      <tbody id="new-schedule">
+        <tr id="add-schedule-row">
+          <td class="lectureDate">
+            <input type="date" id="lecture-date-input" class="form-control-sm">
+          </td>
+          <td class="teacher">
+            <input type="text" id="lecturer" class="form-control-sm " placeholder="담당강사">
+          <td class="track"><input class="form-control-sm exam-code border border-primary" type="text"></td>
+          <td class="track"><input class="form-control-sm exam-code border border-primary" type="text"></td>
+          <td class="track"><input class="form-control-sm exam-code border border-primary" type="text"></td>
+          <td class="track"><input class="form-control-sm exam-code border border-primary" type="text"></td>
+          <td class="track"><input class="form-control-sm exam-code border border-primary" type="text"></td>
+          <td class="track"><input class="form-control-sm exam-code border border-primary" type="text"></td>
+          <td class="track"><input class="form-control-sm exam-code border border-primary" type="text"></td>
+          <td class="track"><input class="form-control-sm exam-code border border-primary" type="text"></td>
+          <td class="track"><input class="form-control-sm exam-code border border-primary" type="text"></td>
+          <td class="track"><input class="form-control-sm exam-code border border-primary" type="text"></td>
+          <td>
+            <div class="btn-group" role="group">
+              <button type="button" class="btn btn-outline-success form-control" id="save-new-schedule">저장</button>
+              <button type="button" class="btn btn-outline-warning form-control" id="cancel-new-schedule">취소</button>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>  
+  </div>
+</div>
+
+
+<!-- 기능 버튼 --> 
+<div class="input-group mb-3">
+  <button class="btn btn-outline-secondary" type="button" id="save-schedules">수정</button>
+  <button class="btn btn-outline-secondary" type="button" id="activation">스케줄 활성화</button>
+  <button class="btn btn-outline-secondary" type="button" id="add-schedule-btn">새 학습 스케줄</button>
+  <div class="btn-group" role="group">
+  <button type="button" class="btn btn-outline-success" id="drive-download-switch" data-status="closed">다운로드</button>
+  <button type="button" class="btn btn-primary d-none" id="download-wait">대기</button>
+  <button class="btn btn-secondary d-none" type="button" id="download-distribute">배부</button>
+  </div>
+  <button class="btn btn-outline-secondary" type="button" id="make-omr">OMR 만들기</button>
+  <button class="btn btn-outline-secondary" type="button" id="get-score">점수 확인</button>
+  <button class="btn btn-outline-secondary" type="button" id="send-score">성적표 보내기</button>
+
+</div>
+<div class="input-group mb-3">
+  <input type="file" class="form-control" name="omrFiles" id="omr-upload" multiple>
+  <button class="btn btn-outline-secondary" type="button" id="omr-upload-btn">OMR 업로드</button>
+  <input type="file" class="form-control" id="drive-upload" name="examFiles" multiple>
+  <div class="btn-group" role="group">
+  <button type="button" class="btn btn-danger d-none" id="drive-upload-zero">진단문제</button>
+  <button class="btn btn-warning d-none" type="button" id="drive-upload-btn">치료문제</button>
+  <button type="button" class="btn btn-outline-success" id="drive-upload-switch" data-status="closed">업로드</button>
+  </div>
+  
+</div>
+</div>
+
+<template id="schedule-template">
+  <tr class="schedule-row">
+    <td class="round"></td>
+    <td class="generatingDate"></td>
+    <td class="lectureDate"></td>
+    <td class="lecturer"></td>
+    <td class="activity"></td>
+  
+  </tr>
+</template>
+

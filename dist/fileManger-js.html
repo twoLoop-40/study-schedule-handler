@@ -1,0 +1,510 @@
+<script>
+  /************************
+   * 여기서 부터 파일 매니저
+   * **********************/
+  // 파일 매니저
+  class FileManager {
+    constructor(userInfo = {}) {
+      this.userInfo = userInfo
+      this.scheduleManager = new ScheduleManager(userInfo)
+    }
+    // 파일 체크
+    // url data 가져오기
+    getURLData (file) {
+      return new Promise ((resolve, reject) => {
+        const fileReader = new FileReader()
+        fileReader.onload = function (e) {
+          const fileData = e.target.result.substring(e.target.result.indexOf(",")+1)
+          resolve(fileData)
+        }
+        fileReader.readAsDataURL(file)
+      })   
+    }
+    // 파일 정보 불러오기
+    loadFileData () {
+      const $examFiles = document.querySelector('#drive-upload')
+      const files = $examFiles.files
+      return Promise.all([...files].map(async file => {
+        const fileData = await this.getURLData(file)
+        return { fileData, fileName: file.name, contentType: file.type }
+      }))
+    }
+    // 걸러진 스케줄 데이터 가져오기
+    async filterFiles () {
+      const sm = this.scheduleManager
+      
+      if(sm.validateSingleCheckBox()){
+        const round = sm.getRoundsOfChecked()[0]
+        // 최신 스케줄 로드
+        await sm.loadSchedules()
+        const examCodes = sm.schedules
+          .filter(schedule => schedule.round == round)[0]
+            .schedule
+            .filter(item => (item[1] == '생성' || item[1] == '포기'))
+            .map(item => item[0])
+        //console.log(examCodes)
+        // 스케줄 체커 만들기
+        const checkers = await Promise.all(examCodes.map(async code => {
+              const checker = await makeRegExCheckerForExamCode(code)
+              return checker
+            }
+          )
+        )
+        
+        const fileInformations = await this.loadFileData()
+        const filteredInfomations = fileInformations.filter(fileInformation => {
+            const { fileName } = fileInformation
+            return !checkers ? false : checkers.some(checker => checker(fileName))
+          })
+        return filteredInfomations
+
+      } else {
+        const alert = makeAlert('warning')
+        alert('하나의 체크박스만 체크 하세요!')
+      }
+    }        
+  }
+
+// exam 코드를 시리즈 아이디, 세트 네임, 트랙 으로 분리해주는 파서
+  const parseExamCode = async function (examCode = '') {
+    if (!examCode) {
+      console.error('Code is empty')
+      return 
+    } else {
+      examCode = examCode.toString()
+    }
+    const seriesMapData = await asyncRun(
+      { serverFunction: 'seriesMapData', args: [] }
+    )
+    const divideExamCode = function () {
+      // set up number of exam code
+      let trackNo, setNo, seriesId
+      pipe(
+        code => { trackNo = code.slice(-1)
+          return code.slice(0, -1) },
+        code => { setNo = code.slice(-2)
+          return code.slice(0, -2) },
+        code => seriesId = code
+      ) (this.examCode)
+      return { seriesId, setNo, trackNo } 
+    }
+    const findRow = function () {
+      const { seriesId } = this.divideExamCode(this.examCode)
+      return this.seriesMapData
+        .map(seriesRow => seriesRow[1])
+        .findIndex(id => id == seriesId)
+    }
+    const getSeriesTitle = function () {
+      return this.seriesMapData[this.findRow()][2]
+    }
+    const getSetName = function () {
+      const { setNo } = this.divideExamCode()
+      return this.seriesMapData[this.findRow()][parseInt(setNo) + 4]
+    }
+    const getTrackNumber = function () {
+      const { trackNo } = this.divideExamCode()
+      return trackNo
+    }
+    const protoType = Object.assign(Object.create(null), 
+      { getSeriesTitle, getSetName, getTrackNumber, findRow, divideExamCode })
+    const result = Object.create(protoType)
+    result.seriesMapData = seriesMapData
+    result.examCode = examCode 
+    return result
+  }
+  // 파서를 이용해서 파일이름이 시험코드에 맞는지를 확인하는 체커를 만드는 함수
+  const makeRegExCheckerForExamCode = async function (examCode = '') {
+    const makeChecker = (checkList = []) => {
+      const addBackslash = (char) => (string) => {
+        if (typeof string === 'string') {
+          return string.replaceAll(char, '\\' + char)
+        }
+        return string
+      }
+      const addLeft = addBackslash('(')
+      const addRight = addBackslash(')')
+      
+      const checkers = checkList
+        .map(item => 
+          [addLeft, addRight].reduce((str, addChar) => 
+            addChar(str), item))
+        .map(item => {
+          if (typeof item === 'string') return new RegExp(item)
+          else return item
+        })
+      return (target = '') => checkers.reduce((prev, checker) => 
+          prev && checker.test(target), true)
+    }
+    const trackType = (examCode) => {
+    const codeDivide = (examCode = '', result = {}) => {
+      if (typeof examCode !== 'string') return codeDivide(examCode.toString(), result)
+      if (result.seriesId && result.trackId && result.trackNo) return result
+      if (!result.trackNo) {
+        result.trackNo = examCode.slice(-1)
+        return codeDivide(examCode, result)
+      }
+      if (!result.trackId) {
+        result.trackId = examCode.slice(-3, -1)
+        return codeDivide(examCode, result)
+      }
+      if (!result.seriesId) {
+        result.seriesId = examCode.slice(0, -3)
+        return codeDivide(examCode, result)
+      }
+    }
+    const MiddleLevelTest = [
+      '05', '06', '54', '55', 
+      '56', '57', '58', '59', 
+      '60', '61', '62', '63', 
+      '64', '65', '66', '67'
+    ]
+    const isMiddleLevel = seriesId => {
+      return MiddleLevelTest.findIndex(item => item === seriesId) > -1
+    }   
+    const exam = codeDivide(examCode)
+    if (exam.trackNo !== '0') {
+      return 'EXAM_STRING'
+    }
+    if (isMiddleLevel(exam.seriesId)) {
+      return exam.trackId === '00' ? 'EXAM_NUMBER' : 'EXAM_STRING_LEVEL'
+    }
+    return 'EXAM_NUMBER'  
+    }
+    const addStringBack = str => target => {
+      if (!str || str === '') return target
+    if (typeof target !== 'string') { target = target.toString() }
+    return target + str
+    }
+    const parser = await parseExamCode(examCode)
+    const [seriesName, setName, trackNo] = [
+      parser.getSeriesTitle(), 
+      parser.getSetName(), 
+      parser.getTrackNumber()
+    ]
+    console.log(`시리즈: ${seriesName}, 세트: ${setName}, 트랙:${trackNo}`)  
+    if(trackType(examCode) === 'EXAM_NUMBER') {
+      return makeChecker([examCode.toString()])
+    } else if (trackType(examCode) === 'EXAM_STRING') {
+      return makeChecker([seriesName, setName, trackNo])    
+    } else if (trackType(examCode) === 'EXAM_STRING_LEVEL') {
+      return makeChecker([seriesName, setName])
+    }
+  }
+
+  /************** 파일을 서버에 보내서 등록하기 ****************/
+  const clearDriveInput = function () {
+    const $driveFileInput = document.querySelector('#drive-upload')
+    $driveFileInput.value =  ''
+  }
+  const sendFilesToGoogleDrive = async function () {
+    const userInfo = getUserInfoFromCaption()
+    const scheduleManager= new ScheduleManager(userInfo)
+    const fileManager = new FileManager(userInfo)
+    const filesInformation = await fileManager.filterFiles()
+    const round = scheduleManager.getRoundsOfChecked()[0]
+    if (filesInformation && filesInformation.length !== 0) {
+      //console.log(round, filesInformation)
+      asyncRun({ 
+        serverFunction: 'filesUpload', 
+        args: [{ userInfo, filesInformation, round }]
+        })
+        .then(({ message }) => {
+          clearDriveInput()
+          const alert = makeAlert('success')
+          alert(message)
+
+        })
+        .then(async () => {
+          await scheduleManager.loadSchedules()
+          scheduleManager.syncSchedules()
+        })
+        .then(() => {
+          const elCheckBoxes = document.querySelectorAll('.edit-schedule')
+          //console.log('모든 체크박스', elCheckBoxes)
+          const checkedBoxes = [...elCheckBoxes].filter(box => box.checked == true) // []
+          //console.log('체크된 체크박스', checkedBoxes)
+          return { checkedBoxes } 
+        })
+        .then(data => {
+          const inputEvent = new InputEvent(
+            'input', 
+            {
+              bubbles: true,
+              cancelable: true
+            }
+          )
+          return { ...data, inputEvent}
+        })
+        .then(data => {
+          const { checkedBoxes, inputEvent } = data
+          checkedBoxes
+            .map(box => {
+              box.checked = false
+              return box })
+            .forEach(box => box.dispatchEvent(inputEvent))
+        })
+        .then(() => {
+          const btnsData = 
+            [
+              { btnId: "drive-upload-zero" },
+              { btnId: "drive-upload-btn" }
+            ]
+          changeLoadBtn(btnsData)
+          const btnData = {
+            btnId: 'drive-upload-switch',
+            textForOpen: '업로드 취소', 
+            textForClosed: '업로드'
+          }
+          btnDataSetChange(btnData)
+        })
+        .catch(err => {
+          console.error(err)
+          clearDriveInput()
+          const alert = makeAlert('danger')
+          alert(err)
+          
+        })
+    } else {
+      clearDriveInput()
+      const alert = makeAlert('warning')
+      alert(' 업로드 할 파일이 없습니다.')
+      
+    } 
+  }
+  // 주어진 버튼의 데이터 중에서 d-none을 변경
+  const buttonChange = function (btnData = {}) { //btnData = { btnId }
+    const { classList } = btnData
+    classList.toggle('d-none')
+    return classList
+  }
+  /*************** 업로드 버튼 변경하기 ****************/
+  const btnDataSetChange = function (btnData = {}) { // btnData = { btnId, textForOpen, textForClosed }
+    return pipe(
+      btnData => {
+        const { btnId } = btnData
+        const elBtn = document.getElementById(btnId)
+        const btnStatus = elBtn.dataset.status
+        return { ...btnData, btnStatus, elBtn }
+      },
+      btnData => {
+        const { btnStatus, elBtn, textForOpen, textForClosed } = btnData
+        if (btnStatus === 'closed') {
+          elBtn.textContent = textForOpen
+          elBtn.dataset.status = 'open'
+        } else if (btnStatus === 'open') {
+          elBtn.textContent = textForClosed
+          elBtn.dataset.status = 'closed'
+        }
+      }
+    ) (btnData)
+  }
+
+  const changeLoadBtn = function (btnsData = []) {
+    return btnsData.map(btnData => {
+      const { btnId } = btnData
+      const elBtn = document.getElementById(btnId)
+      const classList = elBtn.classList
+      return {...btnData, classList} 
+    })
+    .map(btnData => {
+      buttonChange(btnData)
+      return btnData
+    })
+  }
+  /******************* 업로드 버튼 변경 끝 *****************************/
+  /******************* 진단 시험지 업로드 함수 ************************/
+  const loadZeroExam = async function () {
+    const alertWarning = makeAlert('warning')
+    const alertSuccess = makeAlert('success')
+    // userData와 round 정보 받기
+    const userData = pipe(
+      () => {
+        const userInfo = getUserInfoFromCaption()
+        return { userInfo }
+      }, 
+      userData => {
+        const { userInfo } = userData
+        const sm = new ScheduleManager(userInfo)
+        let round;
+        if(sm.validateSingleCheckBox()) { //하나의 체크박스만 체크되어 있는 지 확인
+          round = sm.getRoundsOfChecked()[0]
+        }
+        return { ...userData, round }   
+      }
+    )()
+    if (!userData.round) {
+      alertWarning('하나의 체크 박스만 체크 한 후 다시 시도해 주세요!')
+      return 
+    }
+    // 서버에 파일 업로드 요청
+    pipe(
+      userData => {
+        return asyncRun({ // 파일 이동
+          serverFunction: 'copyExamsToUserFolder', args: [userData]
+        })
+        .then(userData => { // 시트 업로드
+          alertSuccess('파일을 업로드 했습니다.')
+          return asyncRun({
+            serverFunction: 'changeSheetStatus', args: [userData]
+          })
+        })
+        .then(userData => { // 화면에 표시
+          const { userInfo, examCodes } = userData
+          alertSuccess(` ${examCodes.join(' ')}이 업데이트 되었습니다. `)
+          return userData
+        })
+        .catch(err => {
+          alertWarning(err)
+        })
+      }, 
+      async userData => {
+        const { userInfo, round, examCodes } = await userData
+        try{
+          pipe(
+            scheduleData => {
+              const scheduleForRound = scheduleData
+                .filter(schedule => schedule.round.toString() == round)
+                [0]
+              return { scheduleForRound }
+            },
+            data => { // 전역 scheduleData 의 해당하는 round의 스케줄의 examData의 status를 변환
+              const { scheduleForRound } = data // scheduleForRound::{}
+              const { schedule } = scheduleForRound //schedule:: []
+              for (const examData of schedule) {
+                if(examCodes.some(code => code == examData[0])) {
+                  examData[1] = '대기'
+                }
+              }
+              return data
+            }
+          )(scheduleData)
+          return { examCodes }
+        } catch (err) {
+          alertWarning(err)
+          return 
+        }     
+      },
+      async examData => { // 체크 박스 정리 하는 함수 
+        if(!await examData) return
+        examData.then(examData => {
+          const elCheckBoxes = document.querySelectorAll('.edit-schedule')
+          //console.log('모든 체크박스', elCheckBoxes)
+          const checkedBoxes = [...elCheckBoxes].filter(box => box.checked == true) // []
+          //console.log('체크된 체크박스', checkedBoxes)
+          return { examData, checkedBoxes } 
+        })
+        .then(data => {
+          const inputEvent = new InputEvent(
+            'input', 
+            {
+              bubbles: true,
+              cancelable: true
+            }
+          )
+          return { ...data, inputEvent}
+        })
+        .then(data => {
+          const { checkedBoxes, inputEvent } = data
+          checkedBoxes
+            .map(box => {
+              box.checked = false
+              return box })
+            .forEach(box => box.dispatchEvent(inputEvent))
+          return data
+        })
+        .then(data => {
+          const { examData } = data
+          const { examCodes } = examData
+          alertSuccess
+          (
+            ` ${examCodes.join(' ')}의 상태가 바뀐걸 확인할 수 있습니다.`
+          )
+        })
+        .then(() => {
+          const btnsData = 
+            [
+              { btnId: "drive-upload-zero" },
+              { btnId: "drive-upload-btn" }
+            ]
+          changeLoadBtn(btnsData)
+          const btnData = {
+            btnId: 'drive-upload-switch',
+            textForOpen: '업로드 취소', 
+            textForClosed: '업로드'
+          }
+          btnDataSetChange(btnData)
+        })
+        .catch(err => {
+          const alert = makeAlert('warning')
+          alert(err)
+        }) 
+      }      
+    )(userData)
+  }
+  // 시험지 다운로드 하는 함수
+  const loadExamData = async function (mode) {
+    const alertSuccess = makeAlert('success')
+    const alertFailure = makeAlert('danger')
+    return Promise.resolve(mode)
+      .then(mode => { // userInfo, mode
+        const userInfo = getUserInfoFromCaption()
+        return { mode, userInfo } 
+      })
+      .then(data => {
+        const { userInfo } = data
+        const sm = new ScheduleManager(userInfo)
+        const rounds = sm.getRoundsOfChecked()
+        return {...data, rounds}
+      })
+      .then(data => {
+        const { userInfo, mode, rounds } = data
+        const examData = rounds.map(round => {
+          const examCodes = scheduleData
+            .filter(schedule => schedule.round.toString() == round)
+            [0]
+            .schedule
+            .filter(examData => examData[1] == mode)
+            .map(examData => examData[0])
+          return { round, examCodes }
+        })
+        const allExams = examData.map(exams => exams.examCodes).flat()
+        if(allExams.length === 0) {
+          throw Error(`${mode}에 해당하는 시험이 없습니다.`)
+        } else {
+          return { userInfo, examData }
+        }
+      })
+      .then(async data => {
+        const examsURLData = await asyncRun(
+          { serverFunction: 'getFileURLData', args:[data]})
+          .then(URLdata => URLdata.filesURLData.flat())
+        if(!examsURLData || examsURLData.length === 0) {
+          throw Error('다운로드할 파일이 없습니다. 먼저 업로드를 해주세요')
+        } else {
+          console.log(examsURLData.length)
+          return examsURLData
+        }        
+      })
+      .catch(err => {
+        alertFailure(err)
+        return null
+      })      
+  }
+  const downloadExams = async function (examsURLData) { // examsURLData = [{ fileName, fileData }] promise 형태
+    const alertSuccess = makeAlert('success')
+    const alertFailure = makeAlert('failure')
+    Promise.resolve(examsURLData)
+      .then(exams => Promise.all(exams.map(
+        async exam => {
+        const downloadLink = document.createElement('a')
+        downloadLink.download = exam.fileName
+        downloadLink.href = exam.fileData
+        return downloadLink
+        }
+      )))
+      .then(links => links.forEach(link => link.click()))
+      .then(() => alertSuccess('다운로드가 성공적으로 끝났습니다.'))
+      .catch(err => alertFailure(err))
+  }
+  console.log('line470')
+</script>

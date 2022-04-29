@@ -1,0 +1,35 @@
+<label for="class-search-info" id="class-student-label" class="form-label mt-3"></label>
+<div class="input-group mb-3">
+  <span class="input-group-text">클래스 학생</span>
+  <input type="text" class="form-control" id="class-student-search">
+  <span class="input-group-text" id="class-students-number"></span>
+  <button class="btn btn-outline-secondary" type="button" id="all-class-students">전체</button>
+</div>
+
+<table class="table table-hover table-bordered">
+  <thead>
+    <tr>
+      <th scope="col">사용자 코드</th>
+      <th scope="col">학생 이름</th>
+      <th scope="col">학생 정보</th>
+      <th scope="col">학생 스케줄</th>
+      <th scope="col">삭제</th>      
+    </tr>
+  </thead>
+  <tbody id="class-students-results"></tbody>
+</table>
+<div class="alert-gruop container">
+  <div class="alert alert-warning fade show d-none" role="alert"></div>
+  <div class="alert alert-danger fade show d-none" role="alert"></div>
+  <div class="alert alert-success fade show d-none" role="alert"></div>
+</div>  
+
+<label for="class-add-usercode">클래스에 학생을 추가하세요</label>
+<div class="input-group mb-3">
+  <span class="input-group-text">사용자 코드</span>
+  <input type="text" class="form-control" id="class-add-usercode">
+  <span class="input-group-text">학생 이름</span>
+  <input type="text" class="form-control" id="class-add-username">
+  <button class="btn btn-outline-secondary" type="button" id="student-add-btn">저장</button>
+  <button class="btn btn-outline-secondary" type="button" id="student-cancel-btn">취소</button>
+</div>

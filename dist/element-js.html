@@ -1,0 +1,154 @@
+<script>
+  const DataFromElement = function (element) {
+    const getTextFrom = function (identifier = '') {
+      return this.element.querySelector(identifier).textContent
+    }
+    const getAllTextsFrom = function (identifier = '') {
+      return [...this.element.querySelectorAll(identifier)]
+        .map(item => item.textContent)
+    }
+    const getValueFrom = function (identifier = '') {
+      return this.element.querySelector(identifier).value
+    }
+    const getAllValuesFrom = function (identifier = '') {
+      return [...this.element.querySelectorAll(identifier)]
+        .map(item => item.value)
+    }
+    const protoType = Object.assign(
+      Object.create(null), 
+      { 
+        getTextFrom, getAllTextsFrom, 
+        getValueFrom, getAllValuesFrom 
+      }
+    )
+    return Object.assign(Object.create(protoType),  { element })
+  }
+  // 새로 만든 schedule-row에서 schedule data에 넣을 수 있는 정보 만들기
+  const getDataFromScheduleRow = function (tr) {
+    const source = DataFromElement(tr)
+    const replacer = Object.create(null)
+    replacer.lectureDate = source.getTextFrom('.lectureDate')
+    replacer.round = source.getTextFrom('.round')
+    const $tracks = tr.querySelectorAll('.track')
+    replacer.schedule = [...$tracks]
+      .map(track => DataFromElement(track))
+      .map(src => src.getAllValuesFrom('.track-data'))
+    
+    return replacer
+  }
+  /************** element를 만드는 json 구조 만들기 *******************/
+  // {tag, id, classList, type}
+  const createJsonFormat = function () {
+    const tagOn = function (tagString = '') {
+      this.tag = tagString;
+      return this;
+    };
+    const idOn = function (idString = '') {
+      this.id = idString;
+      return this;
+    };
+    const typeOn = function (typeString = '') {
+      this.type = typeString;
+      return this;
+    };
+    const classListOn = function (classListString) {
+      this.classNames = classListString
+      return this;
+    };
+    const textOn = function (text = "") {
+      this.textContent = text;
+      return this;
+    };
+    const valueOn = function (value = "") {
+      this.value = value
+      return this
+    }
+    const readOnlyOn = function (bool) {
+      this.readOnly = bool
+      return this
+    }
+    const getDataOnly = function () {
+      return { ...this };
+    };
+    const o = Object.create({
+      ...Object.create(null),
+      tagOn,
+      idOn,
+      typeOn,
+      classListOn,
+      textOn,
+      valueOn,
+      getDataOnly,
+      readOnlyOn
+    });
+    o.children = [];
+    return o;
+  };
+  const createElementFromJson = function (jsonForElement) {
+    const fillUpCurrentElement = pipe(
+      jsonData => {
+        const { tag } = jsonData
+        const element = document.createElement(tag)
+        return { ...jsonData, element }
+      },
+      jsonData => {
+        const { id, element } = jsonData
+        if(id) {element.id = id}
+        return jsonData
+      },
+      jsonData => {
+        const { classNames, element } = jsonData
+        if(classNames) {
+          classNames.split('.')
+            .filter(className => className)
+            .forEach(classItem => element.classList.add(classItem))
+        }
+        return jsonData
+      },
+      jsonData => {
+        const { type, element } = jsonData
+        if(type) {
+          element.type = type
+        }
+        return jsonData
+      },
+      jsonData => {
+        const { textContent, element } = jsonData
+        if(textContent) {
+          element.textContent = textContent
+        }
+        return jsonData
+      },
+      jsonData => {
+        const { readOnly, element } = jsonData
+        if(readOnly) {
+          element.readOnly = readOnly
+        }
+        return jsonData
+      },
+      jsonData => {
+        const { value, element } = jsonData
+        if(value) {
+          element.value = value
+        }
+        return element
+      }
+      
+    )
+    const iter = function (jsonData) {
+      const node = fillUpCurrentElement(jsonData)
+      const { children } = jsonData
+      let childrenElement
+      if(children.length > 0) {
+        childrenElement = children.map(childJsonData => iter(childJsonData))
+      }
+      if(childrenElement && childrenElement.length > 0) {
+        childrenElement.forEach(child => node.appendChild(child))
+      }
+      return node
+    }
+    return iter(jsonForElement)
+  }
+  console.log('line139')
+
+</script>

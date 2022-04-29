@@ -1,0 +1,300 @@
+<script>
+  // main elements
+  const app = document.querySelector('#app')
+  const search = document.querySelector('#search-link')
+  const addStudent = document.querySelector('#add-student-link')
+  const classSearch = document.querySelector('#class-link')
+  const lectureSearch = document.querySelector('#lecture-link')
+
+  // 학습 스케줄 작성 화면 
+  const loadStudyScheduleView = function (e) {
+    const userName = e.target.dataset.userName
+    const userCode = e.target.dataset.userCode
+    asyncRun({
+      serverFunction: 'loadView',
+      args: [{ fileName: 'studySchedule'}]
+    })
+    .then(html => app.innerHTML = html)
+    .then(() => asyncRun({
+      serverFunction: 'getStudentSchedule',
+      args: [{ userName, userCode }]
+    }))
+    .then(schedules => {
+      scheduleData = schedules
+      console.log(scheduleData)
+      return schedules.map(scheduleInfo => displaySchedule(scheduleInfo))    
+    })
+    .then(elements => elements.forEach(
+      element => 
+        attachNodeOn(document.getElementById('schedule-results'))(
+          element
+        )))
+    .then(() => {
+      const captionEl = document.getElementById('user-info')
+      captionEl.textContent = `${userCode} ${userName}`
+    })
+    .catch(err => console.error(err))
+  }
+  // 학생 찾는 화면 
+  const loadSearchView = function (e) {
+    asyncRun({ 
+      serverFunction: 'loadView', 
+      args: [{ fileName: 'search' }]}
+    )
+    .then(html => app.innerHTML = html)
+    .then(getStudentsBasicInfo)
+    .then(() => changeActiveLink(e))
+    .catch(err => console.error(err))
+  }
+  // 새로운 학생 입력하기
+  const loadAddStudentView = function (e) {
+    asyncRun({
+      serverFunction: 'loadView', 
+      args: [{ fileName: 'addStudent' }]}
+    )
+    .then(html => app.innerHTML = html)
+    .then(() => changeActiveLink(e))
+    .catch(err => console.error(err))
+  }
+  // 클래스 시작 화면
+  const loadClassView =  function (e) {
+    asyncRun({
+      serverFunction: 'loadView',
+      args: [{ fileName: 'class-search'}]
+    })
+    .then(html => app.innerHTML = html)
+    .then(() => changeActiveLink(e))
+    .catch(err => console.error(err))
+  }
+  // 강의 시작 화면
+  const loadLectureView = function (e) {
+    asyncRun({
+      serverFunction: 'loadView',
+      args: [{ fileName: 'lecture-search'}]
+    })
+    .then(html => app.innerHTML = html)
+    .then(() => changeActiveLink(e))
+    .catch(err => console.error(err))
+  }
+  const loadClassEditView = function (e) {
+    const alertWarning = makeAlert('warning')
+    const tr = e.target.closest('tr')
+      Promise.resolve(tr)
+        .then (tr => {
+          const elClassId = tr.querySelector('.classId')
+          const classInfo = classData
+            .filter(classInfo => 
+              classInfo.classId == elClassId.textContent.toString())
+            [0]
+          return classInfo  
+        })
+        .then(classInfo => {
+          return asyncRun(
+            { serverFunction: 'loadView',
+              args: [{ fileName: 'class-students' }]
+            }
+          )
+          .then(html => app.innerHTML = html)
+          .then(() => classInfo)
+        })
+        .then(classInfo => {
+          const { classId, className } = classInfo
+          elLabel = document.querySelector('#class-student-label')
+          elLabel.textContent = `아이디: ${classId} 이름: ${className}`
+          return classInfo
+        })
+        .then(classInfo => {
+          return asyncRun({
+            serverFunction: 'getClassStudents',
+            args: [classInfo]
+          })
+          .then(studentsInfo => {
+            if(!studentsInfo) throw Error('아직 클래스가 만들어지지 않았습니다.')
+            classStudents = studentsInfo
+            console.log(classStudents)
+          })
+        })
+        .then(updateClassStudentsNumber)
+        .catch(err => alertWarning(err))
+  }
+  // 링크 엑티브 바꾸는 프로그램
+  const changeActiveLink = function (e) {
+    Promise.resolve(document.querySelectorAll('.nav-link'))
+      .then(elNavLinks => {
+        elNavLinks.forEach(navlink => navlink.classList.remove('active'))
+      })
+      .then(() => e.target.classList.add('active'))
+      .catch(err => console.error(err))
+
+  }
+  /*****************************************
+   * 클릭 이벤트 핸들러와 인풋 이벤트 핸들러 만들기
+   *****************************************/
+  // clickEventHandler와 inputEventHandler 등록하기
+  const clickEventHandler = async function (e) {
+    if (e.target.matches("#save-student")) {
+      initializeStudent()     
+    }
+    if (e.target.matches(".write-schedule")) {
+      loadStudyScheduleView(e)
+    }
+    if (e.target.matches("#activation")) {
+      await activate()
+    }
+    if (e.target.matches("#drive-upload-btn")) {
+      sendFilesToGoogleDrive()
+    }
+    if (e.target.matches("#add-schedule-btn")) {
+      addScheduleBox()
+    }
+    if (e.target.matches("#save-new-schedule")) {
+      addNewSchedule()
+    }
+    if (e.target.matches("#save-schedules")) {
+      modifySchedules()
+    }
+    if (e.target.matches("#drive-upload-switch")) {
+      const btnsData = 
+        [
+          { btnId: "drive-upload-zero" },
+          { btnId: "drive-upload-btn" }
+        ]
+      changeLoadBtn(btnsData)
+      const btnData = {
+        btnId: 'drive-upload-switch',
+        textForOpen: '업로드 취소', 
+        textForClosed: '업로드'
+      }
+      btnDataSetChange(btnData)
+    }
+    if (e.target.matches("#drive-upload-zero")) {
+      loadZeroExam()
+    }
+    if (e.target.matches('#drive-download-switch')) {
+      const btnsData = 
+      [
+        { btnId: "download-wait"},
+        { btnId: "download-distribute"}
+      ]
+      changeLoadBtn(btnsData)
+      const btnData = {
+        btnId: "drive-download-switch",
+        textForOpen: "다운로드 취소",
+        textForClosed: "다운로드"
+      }
+      btnDataSetChange(btnData)
+    }
+    if (
+      e.target.matches('#download-wait') || 
+      e.target.matches('#download-distribute')) {
+      const btnsData = 
+      [
+        { btnId: "download-wait"},
+        { btnId: "download-distribute"}
+      ]
+      const btnData = {
+        btnId: "drive-download-switch",
+        textForOpen: "다운로드 취소",
+        textForClosed: "다운로드"
+      } 
+      const mode = e.target.textContent
+      const alert = makeAlert('success')
+      await loadExamData(mode)
+        .then(examsURLData => downloadExams(examsURLData))
+        .then(() => changeLoadBtn(btnsData))
+        .then(() => btnDataSetChange(btnData)) 
+    }
+    if (e.target.matches('#save-class')) {
+      await addNewClass()
+    }
+    if (e.target.matches('.class-edit')) {
+      loadClassEditView(e)
+    }
+    if (e.target.matches('#student-cancel-btn')) {
+      const elAddUserCode = document.querySelector('#class-add-usercode')
+      const elAddUserName = document.querySelector('#class-add-username')
+      const elements = [elAddUserCode, elAddUserName]
+      elements.forEach(elem => emptyForCancel(elem))
+    }
+    if (e.target.matches('#student-add-btn')) {
+      const elAddUserCode = document.querySelector('#class-add-usercode')
+      const elAddUserName = document.querySelector('#class-add-username')
+      const elements = { elAddUserCode, elAddUserName }
+      const alertWarning = makeAlert('warning')
+      Promise.resolve(elements)
+        .then(elements => {
+          const { elAddUserCode, elAddUserName } = elements
+          const userCode = elAddUserCode.value, userName = elAddUserName.value
+          if (!userCode || !userName) {
+            emptyForCancel(elAddUserCode)
+            emptyForCancel(elAddUserName)
+            throw Error('다시 입력해 주세요')
+          } else {
+            return { userCode, userName, userElements: { elAddUserCode, elAddUserName } }
+          }
+        })
+        .then(data => {
+          const { userCode, userName, userElements } = data
+          saveClassStudent({ userCode, userName })
+          const { elAddUserCode, elAddUserName } = userElements
+          elAddUserName.value = ''
+          elAddUserCode.value = ''
+        })
+        .catch(err => alertWarning(err))
+    }
+    if (e.target.matches('.class-schedule')) {
+      Promise.resolve(e.target.closest('tr'))
+        .then(elTr => {
+          const classId = elTr.querySelector('.classId').textContent
+          //console.log(classId)
+          return classId
+        })
+        .then(classId => loadClassScheduleView(classId))
+      
+    }
+
+  }
+  const inputEventHandler = function (e) {
+    if(e.target.matches('#student-info')) {
+      searchStudent(e)
+    }
+    if (e.target.matches('.edit-schedule')) {
+      changeScheduleReadOnly(e)
+    }    
+    if (e.target.matches('#class-search-info')) {
+      const event = e
+      matchInput({ event, data: classData })
+        .then(data => {
+          if (data.length == 0) throw Error()
+          data.forEach(classInfo => makeClassTableElement(classInfo))
+        })
+        .catch((e) => {
+          // console.log(e)
+          const tableResultNode = document.querySelector('#class-search-results')
+          tableResultNode.innerHTML = ''
+        })
+    }
+    if(e.target.matches('.track-data')){
+      duplicateExams(e.target)
+    }
+    if(e.target.matches('.exam-code')){
+      duplicateExams(e.target)  
+    }
+    if(e.target.matches('.edit-schedule')) {
+      duplicateExams(e.target)
+    }   
+  }
+   
+  // eventListener 달기
+  app.addEventListener('input', inputEventHandler)
+  app.addEventListener('click', clickEventHandler)
+  classSearch.addEventListener('click', loadClassView)
+  lectureSearch.addEventListener('click', loadLectureView)
+  search.addEventListener('click', loadSearchView)
+  addStudent.addEventListener('click',loadAddStudentView)
+  document.addEventListener('DOMContentLoaded', getStudentsBasicInfo)
+  document.addEventListener('DOMContentLoaded', () => {
+    classListUp()
+    .then(() => console.log(classData, 'class data loadup'))
+  })
+</script>
