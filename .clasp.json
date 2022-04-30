@@ -1,14 +1,14 @@
 {"scriptId":"1RHNezv4Zqnj2l-6J38HK89bwRT3luUZrmhDBBMXo9tioqRDU6XNA2vHP",
 	"rootDir":"dist/",
 	"filePushOrder": [
-		"dist/utility.js",
+		"dist/utility.ts",
 		"dist/serverSide.js",
 		"dist/loadHtml.js",
 		"dist/main.js",
 		"dist/colorMenu.js",
 		"dist/focus.js",
 		"dist/transformFile.ts",
-		"dist/folderAndFiles.js",
+		"dist/folderAndFiles.ts",
 		"dist/makeUserSheet.js",
 		"dist/sendToClassRoom.ts"
 	]

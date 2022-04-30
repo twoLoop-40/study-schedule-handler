@@ -152,11 +152,11 @@ const findFolder = function (currentFolder, folderNames = []) {
   }
   return findFolder(resultFolder, folderNames.slice(1));
 };
-const findFiles = function (currentFolder, fileNames = []) {
+const findFiles = function (currentFolder: GoogleAppsScript.Drive.Folder, fileNames: string[]) {
   //console.log(fileNames.forEach(fileName => typeof fileName))
-  const findFile = function (fileName) {
+  const findFile = function (fileName: string) {
     const files = currentFolder.getFiles();
-    result = [];
+    const result:GoogleAppsScript.Drive.File[] = [];
     while (files.hasNext() && result.length < 2) {
       const file = files.next();
       if (file.getName().indexOf(fileName) > -1) {
@@ -171,8 +171,8 @@ const findFiles = function (currentFolder, fileNames = []) {
     .flat()
     .filter((file) => file);
 };
-const findFileRegs = function (currentFolder, fileNameRegs = []) {
-  const findFile = function (fileNameReg) {
+const findFileRegs = function (currentFolder: GoogleAppsScript.Drive.Folder, fileNameRegs = []) {
+  const findFile = function (fileNameReg: RegExp) {
     const files = currentFolder.getFiles();
     while (files.hasNext()) {
       const file = files.next();
