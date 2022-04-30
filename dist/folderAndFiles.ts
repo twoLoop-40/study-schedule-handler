@@ -100,19 +100,19 @@ const getExamCodes = function ({ userInfo, round }) {
   )(examRange);
 };
 // examcodes 를 폴더 넘버와 파일 넘버로 분해
-const divideExamCode = function (examCode) {
+function  divideExamCode (examCode: string) {
   // set up number of exam code
-  let trackNo, setNo, seriesId;
+  let trackNo: string, setNo: string, seriesId: string;
   pipe(
-    (code) => {
+    (code: string) => {
       trackNo = code.slice(-1);
       return code.slice(0, -1);
     },
-    (code) => {
+    (code: string) => {
       setNo = code.slice(-2);
       return code.slice(0, -2);
     },
-    (code) => (seriesId = code)
+    (code: string) => (seriesId = code)
   )(examCode);
   return { seriesId, setNo, trackNo };
 };
@@ -122,8 +122,10 @@ const classifyExamCodes = function ({ examCodes = [] } = {}) {
   if (examCodes.length == 0) return;
 
   const classifiedExamCodes = examCodes
-    .map((examCode) => {
-      const { seriesId } = divideExamCode(examCode.toString());
+    .map((examCode: number | string) => {
+      const { seriesId } = divideExamCode(
+        typeof examCode == 'number' ? examCode.toString() : examCode
+      )
       return { seriesId, examCode };
     })
     .reduce((results, { seriesId, examCode }) => {
