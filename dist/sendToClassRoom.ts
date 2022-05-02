@@ -48,6 +48,35 @@ class Student <T extends SheetData> {
 	) {}
 }
 
-function testStudentInformation () {
-	getStudentsInformation()?.forEach((student: Student<SheetData>) => console.log(student.getUserName()))
+function makeTemplate (student: Student<SheetData>) {
+	const studentInspection = (student: Student<SheetData>): boolean => {
+		return student.getClassroomId() && student.getStudentId() && student.getTopicId() ? true : false
+	}
+	interface BasicInfoForClassroom {
+		workType?: string
+		assigneeMode?: string
+		state?: string
+		individualStudentsOptions?: { studentIds: string[]}
+		topicId?: string
+	}
+	const basicTemplate = (basic: BasicInfoForClassroom): BasicInfoForClassroom => {
+		return !basic.workType 
+			? (basic.workType = "ASSIGNMENT", basicTemplate(basic)) 
+			: !basic.assigneeMode 
+			? (basic.assigneeMode = "INDIVIDUAL_STUDENTS", basicTemplate(basic))
+			: !basic.state 
+			? (basic.state = "PUBLISHED", basicTemplate(basic))
+			: !basic.topicId 
+			? (basic.topicId = student.getTopicId(), basicTemplate(basic))
+			: !basic.individualStudentsOptions 
+			? (basic.individualStudentsOptions = { studentIds: [student.getStudentId()]}, basicTemplate(basic))
+			: basic
+	} 
+	return studentInspection(student) ? basicTemplate({}) : null
+}
+
+function testTemplate () {
+	const students = getStudentsInformation()
+	
+	console.log(students? (console.log(students[0]), makeTemplate(students[0])) : null) 
 }
